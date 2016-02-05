@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Plugins are initialized once when the server starts. Here are the initilization steps:
 

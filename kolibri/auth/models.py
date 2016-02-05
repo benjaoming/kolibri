@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 We have three main abstractions: Users, Collections, and Roles. Users represent people, like students in a school,
 teachers for a classroom, or volunteers setting up informal installations.

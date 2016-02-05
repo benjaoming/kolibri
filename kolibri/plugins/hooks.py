@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Hooks are used for your plugin's ``hooks`` attribute, a dictionary
 with hooks you wish to use. The keys are pre-defined constants in this module or arbitrary strings. For instance::

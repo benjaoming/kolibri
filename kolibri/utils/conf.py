@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Reading and writing of kolibri configuration.
 
 TODO: We need to figure out our conf API. Do we store in ini/json/yaml?

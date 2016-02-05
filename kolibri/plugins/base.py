@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """The base of a Kolibri plugin is the inheritence from
 :class:`.KolibriPluginBase`.
 """

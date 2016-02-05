@@ -1,9 +1,7 @@
 #!/usr/bin/env python
-
-import sys
+# -*- coding: utf-8 -*-
 
 from setuptools import setup
-from setuptools.command.test import test as TestCommand
 
 readme = open('README.rst').read()
 doclink = """

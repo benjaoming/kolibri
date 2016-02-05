@@ -1,20 +1,18 @@
+# -*- coding: utf-8 -*-
 """
 Tests for `kolibri` module.
 """
 from __future__ import absolute_import, print_function, unicode_literals
 
+import logging
 import os
 import shutil
 import tempfile
 import unittest
 
-
-import logging
+from kolibri.utils.cli import main
 
 logger = logging.getLogger(__name__)
-
-
-from kolibri.utils.cli import main
 
 
 class KolibriTestBase(unittest.TestCase):

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 The core app of Kolibri also uses the plugin API <3
 """

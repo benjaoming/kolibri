@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Implements a custom auth backend as described in the Django docs. Notably authentication could be provided by the
 default Django backend, but authorization (i.e. permissions checking) must be handled by our custom backends since we

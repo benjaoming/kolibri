@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TODO: Write something about this module (everything in the docstring
 enters the docs)
 """
