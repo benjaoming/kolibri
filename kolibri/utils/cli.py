@@ -15,6 +15,7 @@ from distutils import util
 
 import kolibri  # noqa
 from kolibri import dist as kolibri_dist  # noqa
+from kolibri.core.deviceadmin.utils import IncompatibleDatabase
 sys.path = sys.path + [
     os.path.realpath(os.path.dirname(kolibri_dist.__file__))
 ]
@@ -187,6 +188,16 @@ def initialize(debug=False):
         version = open(version_file(), "r").read()
         change_version = kolibri.__version__ != version.strip()
         if change_version:
+            # Version changed, make a backup no matter what.
+            from kolibri.core.deviceadmin.utils import dbbackup
+            try:
+                backup = dbbackup(version)
+                logger.info(
+                    "Backed up database to: {path}".format(path=backup))
+            except IncompatibleDatabase:
+                logger.warning(
+                    "Skipped automatic database backup, not compatible with "
+                    "this DB engine.")
             enable_default_plugins()
 
         django.setup()
