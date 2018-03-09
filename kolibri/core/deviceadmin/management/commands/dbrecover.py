@@ -8,7 +8,7 @@ import sys
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
-from six.moves import input
+from six.moves import input  # noqa
 
 from ... import utils
 
