@@ -13,6 +13,7 @@
           :autofocus="true"
           :invalid="nameIsInvalid"
           :invalidText="nameIsInvalidText"
+          :maxlength="50"
           @blur="nameBlurred = true"
           v-model.trim="name"
         />
@@ -39,10 +40,11 @@
 
 <script>
 
-  import { renameGroup, displayModal } from '../../state/actions/group';
   import coreModal from 'kolibri.coreVue.components.coreModal';
   import kTextbox from 'kolibri.coreVue.components.kTextbox';
   import kButton from 'kolibri.coreVue.components.kButton';
+  import { renameGroup, displayModal } from '../../state/actions/group';
+
   export default {
     name: 'renameGroupModal',
     $trs: {
@@ -82,7 +84,8 @@
     },
     computed: {
       duplicateName() {
-        if (this.name === this.groupName) {
+        // if same name, different case
+        if (this.name.toUpperCase() === this.groupName.toUpperCase()) {
           return false;
         }
         const index = this.groups.findIndex(

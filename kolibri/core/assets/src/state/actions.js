@@ -1,13 +1,14 @@
+import debounce from 'lodash/debounce';
 import {
   isUserLoggedIn,
   currentUserId,
   isSuperuser,
   isAdmin,
+  isCoach,
   currentFacilityId,
   facilities,
 } from 'kolibri.coreVue.vuex.getters';
 import * as CoreMappers from 'kolibri.coreVue.vuex.mappers';
-import { MasteryLoggingMap, AttemptLoggingMap, InteractionTypes, LoginErrors } from '../constants';
 import logger from 'kolibri.lib.logging';
 import {
   SessionResource,
@@ -23,9 +24,10 @@ import {
 import { now } from 'kolibri.utils.serverClock';
 import urls from 'kolibri.urls';
 import ConditionalPromise from 'kolibri.lib.conditionalPromise';
-import intervalTimer from '../timer';
 import { redirectBrowser } from 'kolibri.utils.browser';
 import { createTranslator } from 'kolibri.utils.i18n';
+import intervalTimer from '../timer';
+import { MasteryLoggingMap, AttemptLoggingMap, InteractionTypes, LoginErrors } from '../constants';
 
 const name = 'coreTitles';
 
@@ -37,8 +39,8 @@ const translator = createTranslator(name, messages);
 
 const logging = logger.getLogger(__filename);
 const intervalTime = 5000; // Frequency at which time logging is updated
-const progressThreshold = 0.25; // Update logs if user has reached 25% more progress
-const timeThreshold = 60; // Update logs if 60 seconds have passed since last update
+const progressThreshold = 0.4; // Update logs if user has reached 40% more progress
+const timeThreshold = 120; // Update logs if 120 seconds have passed since last update
 
 /**
  * Vuex State Mappers
@@ -152,6 +154,7 @@ function _channelListState(data) {
     last_updated: channel.last_updated,
     version: channel.version,
     thumbnail: channel.thumbnail,
+    num_coach_contents: channel.num_coach_contents,
   }));
 }
 
@@ -172,6 +175,22 @@ function handleApiError(store, errorObject) {
 }
 
 /**
+ * Used to prevent inadvertent actions if a user double-clicks to navigate
+ *
+ * Something of a hack. A better strategy would be to create a new
+ * `setLoading` action which handles both `state.core.loading` and
+ * `state.core.blockDoubleClicks` with a single function.
+ */
+function blockDoubleClicks(store) {
+  if (!store.state.core.blockDoubleClicks) {
+    store.dispatch('CORE_BLOCK_CLICKS', true);
+    setTimeout(() => {
+      store.dispatch('CORE_BLOCK_CLICKS', false);
+    }, 500);
+  }
+}
+
+/**
  * Signs in user.
  *
  * @param {object} store The store.
@@ -187,12 +206,16 @@ function kolibriLogin(store, sessionPayload, isFirstDeviceSignIn) {
       store.dispatch('CORE_SET_SESSION', _sessionState(session));
       const facilityURL = urls['kolibri:facilitymanagementplugin:facility_management']();
       const deviceURL = urls['kolibri:devicemanagementplugin:device_management']();
+      const coachURL = urls['kolibri:coach:coach']();
       if (isFirstDeviceSignIn) {
         // Hacky way to redirect to content import page after completing setup wizard
         redirectBrowser(`${window.location.origin}${deviceURL}#/welcome`);
       } else if (isSuperuser(store.state) || isAdmin(store.state)) {
         /* Very hacky solution to redirect an admin or superuser to Manage tab on login*/
         redirectBrowser(window.location.origin + facilityURL);
+      } else if (isCoach(store.state)) {
+        /* Even more hacky solution to redirect a coach to Coach tab on login*/
+        redirectBrowser(window.location.origin + coachURL);
       } else {
         redirectBrowser();
       }
@@ -397,6 +420,22 @@ function setChannelInfo(store) {
     );
 }
 
+function saveContentSessionLog(store, sessionModel, contentSession) {
+  sessionModel.save(contentSession).catch(error => {
+    handleApiError(store, error);
+  });
+}
+
+const debouncedSaveContentSessionLog = debounce(saveContentSessionLog, 1000, { maxWait: 5000 });
+
+function saveContentSummaryLog(store, summaryModel, contentSummary) {
+  summaryModel.save(contentSummary).catch(error => {
+    handleApiError(store, error);
+  });
+}
+
+const debouncedSaveContentSummaryLog = debounce(saveContentSummaryLog, 1000, { maxWait: 5000 });
+
 /**
  * Do a PATCH to update existing logging models
  * Must be called after initContentSession
@@ -412,17 +451,19 @@ function saveLogs(store) {
   /* If a session model exists, save it with updated values */
   if (sessionLog.id) {
     const sessionModel = ContentSessionLogResource.getModel(sessionLog.id);
-    sessionModel.save(_contentSessionModel(store)).catch(error => {
-      handleApiError(store, error);
-    });
+    const contentSession = _contentSessionModel(store);
+    // Get all data from the vuex store synchronously, but then debounce the save to
+    // prevent repeated saves to the server.
+    debouncedSaveContentSessionLog(store, sessionModel, contentSession);
   }
 
   /* If a summary model exists, save it with updated values */
   if (summaryLog.id) {
     const summaryModel = ContentSummaryLogResource.getModel(summaryLog.id);
-    summaryModel.save(_contentSummaryModel(store)).catch(error => {
-      handleApiError(store, error);
-    });
+    const contentSummary = _contentSummaryModel(store);
+    // Get all data from the vuex store synchronously, but then debounce the save to
+    // prevent repeated saves to the server.
+    debouncedSaveContentSummaryLog(store, summaryModel, contentSummary);
   }
 }
 
@@ -733,9 +774,9 @@ function initMasteryLog(store, masterySpacingTime, masteryCriterion) {
 
 function updateMasteryAttemptState(
   store,
-  { currentTime, correct, complete, firstAttempt, hinted, answerState, simpleAnswer }
+  { currentTime, correct, complete, firstAttempt, hinted, answerState, simpleAnswer, error }
 ) {
-  store.dispatch('UPDATE_LOGGING_MASTERY', currentTime, correct, firstAttempt, hinted);
+  store.dispatch('UPDATE_LOGGING_MASTERY', currentTime, correct, firstAttempt, hinted, error);
   store.dispatch('UPDATE_LOGGING_ATTEMPT', {
     currentTime,
     correct,
@@ -744,6 +785,7 @@ function updateMasteryAttemptState(
     hinted,
     answerState,
     simpleAnswer,
+    error,
   });
 }
 
@@ -757,6 +799,7 @@ function clearSnackbar(store) {
 export {
   handleError,
   handleApiError,
+  blockDoubleClicks,
   kolibriLogin,
   kolibriLogout,
   getCurrentSession,

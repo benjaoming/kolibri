@@ -1,16 +1,16 @@
-import { LessonsPageNames } from '../../constants/lessonsConstants';
 import { getChannels } from 'kolibri.coreVue.vuex.getters';
 import { assessmentMetaDataState } from 'kolibri.coreVue.vuex.mappers';
-import { setClassState } from './main';
 import { LearnerGroupResource, LessonResource, ContentNodeResource } from 'kolibri.resources';
-import LessonReportResource from '../../apiResources/lessonReport';
 import { ContentNodeKinds } from 'kolibri.coreVue.vuex.constants';
 import { createTranslator } from 'kolibri.utils.i18n';
 import { getContentNodeThumbnail } from 'kolibri.utils.contentNode';
 import { handleApiError, createSnackbar } from 'kolibri.coreVue.vuex.actions';
 import { error as logError } from 'kolibri.lib.logging';
 import router from 'kolibri.coreVue.router';
+import LessonReportResource from '../../apiResources/lessonReport';
+import { LessonsPageNames } from '../../constants/lessonsConstants';
 import { lessonSummaryLink } from '../../views/lessons/lessonsRouterUtils';
+import { setClassState } from './main';
 
 const translator = createTranslator('lessonsPageTitles', {
   lessons: 'Lessons',
@@ -99,8 +99,9 @@ export function showLessonSummaryPage(store, classId, lessonId) {
       // TODO state mapper
       const resourceIds = currentLesson.resources.map(resourceObj => resourceObj.contentnode_id);
 
-      return getResourceCache(store, resourceIds).then(() => {
-        store.dispatch('SET_WORKING_RESOURCES', resourceIds);
+      return getResourceCache(store, resourceIds).then(resourceCache => {
+        const availableResourceIds = resourceIds.filter(id => resourceCache[id]);
+        store.dispatch('SET_WORKING_RESOURCES', availableResourceIds);
         store.dispatch('SET_LEARNER_GROUPS', learnerGroups);
         store.dispatch('SET_LESSON_REPORT', lessonReport);
         store.dispatch('CORE_SET_PAGE_LOADING', false);
@@ -159,18 +160,21 @@ function showResourceSelectionPage(
         ContentNodeResource.fetchAncestors(resourceId)
       );
 
-      return Promise.all(getResourceAncestors).then(
-        // there has to be a better way
-        resourceAncestors => {
-          resourceAncestors.forEach(ancestorArray =>
+      return Promise.all(
+        getResourceAncestors.map(getResourceAncestor =>
+          getResourceAncestor.then(ancestorArray => {
             ancestorArray.forEach(ancestor => {
               if (ancestorCounts[ancestor.pk]) {
                 ancestorCounts[ancestor.pk]++;
               } else {
                 ancestorCounts[ancestor.pk] = 1;
               }
-            })
-          );
+            });
+          })
+        )
+      ).finally(
+        // there has to be a better way
+        () => {
           store.dispatch('SET_ANCESTOR_COUNTS', ancestorCounts);
           // carry pendingSelections over from other interactions in this modal
           store.dispatch('SET_CONTENT_LIST', contentList);
@@ -196,6 +200,7 @@ export function showLessonResourceSelectionRootPage(store, classId, lessonId) {
       description: channel.description,
       title: channel.title,
       thumbnail: channel.thumbnail,
+      num_coach_contents: channel.num_coach_contents,
       kind: ContentNodeKinds.CHANNEL,
     };
   });
@@ -228,6 +233,7 @@ export function showLessonResourceSelectionTopicPage(store, classId, lessonId, t
           content_id: node.content_id,
           channel_id: node.channel_id,
           description: node.description,
+          num_coach_contents: node.num_coach_contents,
           title: node.title,
           thumbnail: getContentNodeThumbnail(node),
           kind: node.kind,
@@ -279,14 +285,18 @@ function getResourceCache(store, resourceIds) {
 
 export function saveLessonResources(store, lessonId, resourceIds) {
   return getResourceCache(store, resourceIds).then(resourceCache => {
-    const resources = resourceIds.map(resourceId => {
-      const node = resourceCache[resourceId];
-      return {
-        contentnode_id: resourceId,
-        channel_id: node.channel_id,
-        content_id: node.content_id,
-      };
-    });
+    const resources = resourceIds
+      .map(resourceId => {
+        const node = resourceCache[resourceId];
+        if (node) {
+          return {
+            contentnode_id: resourceId,
+            channel_id: node.channel_id,
+            content_id: node.content_id,
+          };
+        }
+      })
+      .filter(resource => resource);
 
     return LessonResource.getModel(lessonId).save({ resources });
   });

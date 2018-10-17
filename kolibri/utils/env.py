@@ -1,23 +1,19 @@
 import logging
 import os
+import platform
 import sys
-from distutils import util
 
-logger = logging.getLogger(__name__)
-
-
-def get_cext_path(dist_path):
+def prepend_cext_path(dist_path):
     """
-    Get the directory of dist/cext.
+    Calculate the directory of C extensions and add it to sys.path if exists.
     """
-    # Python version of current platform
     python_version = 'cp' + str(sys.version_info.major) + str(sys.version_info.minor)
-    dirname = os.path.join(dist_path, 'cext/' + python_version)
+    system_name = platform.system()
+    machine_name = platform.machine()
+    dirname = os.path.join(dist_path, 'cext', python_version, system_name)
 
-    platform = util.get_platform()
     # For Linux system with cpython<3.3, there could be abi tags 'm' and 'mu'
-    if 'linux' in platform and int(python_version[2:]) < 33:
-        dirname = os.path.join(dirname, 'linux')
+    if system_name == 'Linux' and int(python_version[2:]) < 33:
         # encode with ucs2
         if sys.maxunicode == 65535:
             dirname = os.path.join(dirname, python_version+'m')
@@ -25,9 +21,14 @@ def get_cext_path(dist_path):
         else:
             dirname = os.path.join(dirname, python_version+'mu')
 
-    dirname = os.path.join(dirname, platform)
-    sys.path = [os.path.realpath(str(dirname))] + sys.path
-
+    dirname = os.path.join(dirname, machine_name)
+    noarch_dir = os.path.join(dist_path, 'cext')
+    if os.path.exists(dirname):
+        # If the directory of platform-specific cextensions (cryptography) exists,
+        # add it + the matching noarch (OpenSSL) modules to sys.path
+        sys.path = [str(dirname), str(noarch_dir)] + sys.path
+    else:
+        logging.warning('No C Extensions available for this platform.\n')
 
 def set_env():
     """
@@ -42,13 +43,7 @@ def set_env():
     sys.path = [os.path.realpath(os.path.dirname(kolibri_dist.__file__))] + sys.path
 
     # Add path for c extensions to sys.path
-    get_cext_path(os.path.realpath(os.path.dirname(kolibri_dist.__file__)))
-    try:
-        import cryptography  # noqa
-    except ImportError:
-        # Fallback
-        logging.warning('No C Extensions available for this platform.\n')
-        sys.path = sys.path[1:]
+    prepend_cext_path(os.path.realpath(os.path.dirname(kolibri_dist.__file__)))
 
     # This was added in
     # https://github.com/learningequality/kolibri/pull/580
@@ -76,4 +71,3 @@ def set_env():
     os.environ.setdefault(
         "KOLIBRI_HOME", os.path.join(os.path.expanduser("~"), ".kolibri")
     )
-    os.environ.setdefault("KOLIBRI_LISTEN_PORT", "8080")

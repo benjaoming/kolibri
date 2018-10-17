@@ -13,6 +13,7 @@
           :autofocus="true"
           :invalid="nameIsInvalid"
           :invalidText="nameIsInvalidText"
+          :maxlength="50"
           @blur="nameBlurred = true"
           v-model.trim="name"
         />
@@ -41,10 +42,11 @@
 
 <script>
 
-  import { createClass, displayModal } from '../../state/actions';
   import kButton from 'kolibri.coreVue.components.kButton';
   import coreModal from 'kolibri.coreVue.components.coreModal';
   import kTextbox from 'kolibri.coreVue.components.kTextbox';
+  import { createClass, displayModal } from '../../state/actions';
+
   export default {
     name: 'classCreateModal',
     $trs: {

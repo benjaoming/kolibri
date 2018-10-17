@@ -36,7 +36,7 @@
         </div>
       </div>
 
-      <resource-list-table v-if="lessonResources.length" />
+      <resource-list-table v-if="workingResources.length" />
 
       <p v-else class="no-resources-message">
         {{ $tr('noResourcesInLesson') }}
@@ -53,15 +53,15 @@
 <script>
 
   import kDropdownMenu from 'kolibri.coreVue.components.kDropdownMenu';
-  import ResourceListTable from './ResourceListTable';
   import kRouterLink from 'kolibri.coreVue.components.kRouterLink';
   import map from 'lodash/map';
-  import ManageLessonModals from './ManageLessonModals';
+  import { ContentNodeKinds } from 'kolibri.coreVue.vuex.constants';
   import { AssignmentActions } from '../../../constants/assignmentsConstants';
   import { selectionRootLink } from '../lessonsRouterUtils';
   import AssignmentSummary from '../../assignments/AssignmentSummary';
-  import { ContentNodeKinds } from 'kolibri.coreVue.vuex.constants';
   import { setLessonsModal } from '../../../state/actions/lessons';
+  import ManageLessonModals from './ManageLessonModals';
+  import ResourceListTable from './ResourceListTable';
 
   export default {
     name: 'lessonSummaryPage',
@@ -115,6 +115,7 @@
         lessonAssignments: state => state.pageState.currentLesson.lesson_assignments,
         lessonResources: state => state.pageState.currentLesson.resources,
         learnerGroups: state => state.pageState.learnerGroups,
+        workingResources: state => state.pageState.workingResources,
       },
     },
     $trs: {

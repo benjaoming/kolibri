@@ -10,6 +10,7 @@
           :autofocus="true"
           :invalid="titleIsInvalid"
           :invalidText="titleIsInvalidText"
+          :maxlength="100"
           @blur="titleBlurred = true"
           v-model.trim="inputTitle"
         />
@@ -47,7 +48,11 @@
 
       <div>
         <transition name="fade" mode="out-in">
-          <ui-progress-linear v-if="loading" key="progress" />
+          <k-circular-loader
+            v-if="loading"
+            key="progress"
+            :delay="false"
+          />
 
           <core-table
             v-else
@@ -57,6 +62,7 @@
               <tr>
                 <th class="core-table-checkbox-col">
                   <k-checkbox
+                    v-if="exercises.length || !subtopics.every(subtopic => subtopic.channel)"
                     :label="$tr('selectAll')"
                     :showLabel="false"
                     :checked="allExercisesWithinCurrentTopicSelected"
@@ -75,6 +81,7 @@
                 :key="exercise.id"
                 :exerciseId="exercise.id"
                 :exerciseTitle="exercise.title"
+                :numCoachContents="exercise.num_coach_contents"
                 :exerciseNumAssessments="exercise.numAssessments"
                 :selectedExercises="selectedExercises"
                 @addExercise="handleAddExercise"
@@ -82,9 +89,12 @@
               />
               <topic-row
                 v-for="topic in subtopics"
+                v-if="topic.allExercisesWithinTopic.length"
                 :key="topic.id"
+                :channel="topic.channel"
                 :topicId="topic.id"
                 :topicTitle="topic.title"
+                :numCoachContents="topic.num_coach_contents"
                 :allExercisesWithinTopic="topic.allExercisesWithinTopic"
                 :selectedExercises="selectedExercises"
                 @goToTopic="handleGoToTopic"
@@ -129,26 +139,13 @@
 
 <script>
 
-  import topicRow from './topic-row';
-  import exerciseRow from './exercise-row';
-  import previewNewExamModal from './preview-new-exam-modal';
-  import {
-    goToTopic,
-    goToTopLevel,
-    createExamAndRoute,
-    addExercise,
-    removeExercise,
-    setExamsModal,
-    setSelectedExercises,
-  } from '../../../state/actions/exam';
-  import { Modals as ExamModals } from '../../../constants/examConstants';
   import responsiveWindow from 'kolibri.coreVue.mixins.responsiveWindow';
   import kButton from 'kolibri.coreVue.components.kButton';
   import kCheckbox from 'kolibri.coreVue.components.kCheckbox';
   import kTextbox from 'kolibri.coreVue.components.kTextbox';
   import kGrid from 'kolibri.coreVue.components.kGrid';
   import kGridItem from 'kolibri.coreVue.components.kGridItem';
-  import uiProgressLinear from 'keen-ui/src/UiProgressLinear';
+  import kCircularLoader from 'kolibri.coreVue.components.kCircularLoader';
   import uiAlert from 'kolibri.coreVue.components.uiAlert';
   import shuffle from 'lodash/shuffle';
   import orderBy from 'lodash/orderBy';
@@ -156,11 +153,26 @@
   import { createSnackbar } from 'kolibri.coreVue.vuex.actions';
   import coreTable from 'kolibri.coreVue.components.coreTable';
   import flatMap from 'lodash/flatMap';
+  import { Modals as ExamModals } from '../../../constants/examConstants';
+  import {
+    goToTopic,
+    goToTopLevel,
+    createExamAndRoute,
+    addExercise,
+    addExercisesToExam,
+    removeExercisesFromExam,
+    removeExercise,
+    setExamsModal,
+    setSelectedExercises,
+  } from '../../../state/actions/exam';
+  import previewNewExamModal from './preview-new-exam-modal';
+  import exerciseRow from './exercise-row';
+  import topicRow from './topic-row';
 
   export default {
     name: 'createExamPage',
     components: {
-      uiProgressLinear,
+      kCircularLoader,
       kButton,
       kTextbox,
       kGrid,
@@ -224,13 +236,6 @@
       },
       titleIsInvalid() {
         return Boolean(this.titleIsInvalidText);
-      },
-      maxQuestionsFromSelection() {
-        // in case numAssestments is null, return 0
-        return this.selectedExercises.reduce(
-          (sum, exercise) => sum + (exercise.numAssessments || 0),
-          0
-        );
       },
       numQuestExceedsSelection() {
         return this.inputNumQuestions > this.maxQuestionsFromSelection;
@@ -382,14 +387,14 @@
       },
       handleAddTopicExercises(allExercisesWithinTopic, topicTitle, topicId) {
         this.selectionMade = true;
-        allExercisesWithinTopic.forEach(exercise => this.addExercise(exercise));
+        this.addExercisesToExam(allExercisesWithinTopic);
         this.createSnackbar({ text: `${this.$tr('added')} ${topicTitle}`, autoDismiss: true });
         if (!this.dummyChannelId) {
           this.setDummyChannelId(topicId);
         }
       },
       handleRemoveTopicExercises(allExercisesWithinTopic, topicTitle) {
-        allExercisesWithinTopic.forEach(exercise => this.removeExercise(exercise));
+        this.removeExercisesFromExam(allExercisesWithinTopic);
         this.createSnackbar({ text: `${this.$tr('removed')} ${topicTitle}`, autoDismiss: true });
       },
       preview() {
@@ -449,6 +454,7 @@
         subtopics: state => state.pageState.subtopics,
         exercises: state => state.pageState.exercises,
         selectedExercises: state => state.pageState.selectedExercises,
+        maxQuestionsFromSelection: state => state.pageState.availableQuestions,
         examsModalSet: state => state.pageState.examsModalSet,
       },
       actions: {
@@ -456,6 +462,8 @@
         goToTopLevel,
         createExamAndRoute,
         addExercise,
+        addExercisesToExam,
+        removeExercisesFromExam,
         removeExercise,
         setExamsModal,
         createSnackbar,

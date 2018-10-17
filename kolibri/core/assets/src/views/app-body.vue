@@ -2,11 +2,18 @@
 
   <!-- class unused, used as identifier when debugging from DOM -->
   <div class="app-body" :style="contentStyle">
-    <loading-spinner v-if="loading" />
-    <template v-else>
+    <div v-if="blockDoubleClicks" class="click-mask"></div>
+    <k-linear-loader
+      v-if="loading"
+      class="toolbar-loader"
+      :style="{ top: isMobile ? '56px' : '64px' }"
+      type="indeterminate"
+      :delay="false"
+    />
+    <div v-else class="wrapper">
       <error-box v-if="error" />
       <slot></slot>
-    </template>
+    </div>
   </div>
 
 </template>
@@ -14,20 +21,18 @@
 
 <script>
 
-  import loadingSpinner from 'kolibri.coreVue.components.loadingSpinner';
+  import kLinearLoader from 'kolibri.coreVue.components.kLinearLoader';
+  import responsiveWindow from 'kolibri.coreVue.mixins.responsiveWindow';
   import errorBox from './error-box';
 
   export default {
     name: 'appBody',
     components: {
-      loadingSpinner,
       errorBox,
+      kLinearLoader,
     },
+    mixins: [responsiveWindow],
     props: {
-      padding: {
-        type: Number,
-        required: true,
-      },
       // reserve space at the top for appbar
       topGap: {
         type: Number,
@@ -42,6 +47,12 @@
       },
     },
     computed: {
+      isMobile() {
+        return this.windowSize.breakpoint < 2;
+      },
+      padding() {
+        return this.isMobile ? 16 : 32;
+      },
       contentStyle() {
         return {
           top: `${this.topGap}px`,
@@ -53,6 +64,7 @@
     vuex: {
       getters: {
         loading: state => state.core.loading,
+        blockDoubleClicks: state => state.core.blockDoubleClicks,
         error: state => state.core.error,
         documentTitle: state => state.core.title,
       },
@@ -69,5 +81,22 @@
     right: 0
     position: absolute
     overflow-x: hidden
+
+  .wrapper
+    max-width: 1000px
+    margin: auto
+
+  .toolbar-loader
+    position: fixed
+    right: 0
+    left: 0
+
+  .click-mask
+    position: fixed
+    top: 0
+    left: 0
+    width: 100%
+    height: 100%
+    z-index: 24
 
 </style>

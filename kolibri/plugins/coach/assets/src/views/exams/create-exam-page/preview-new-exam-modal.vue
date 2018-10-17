@@ -9,7 +9,8 @@
     <k-button
       slot="randomize-button"
       :text="$tr('randomize')"
-      :primary="true"
+      :primary="false"
+      class="randomize-btn"
       @click="$emit('randomize')"
     />
   </preview-exam-modal>
@@ -19,9 +20,10 @@
 
 <script>
 
+  import kButton from 'kolibri.coreVue.components.kButton';
   import { setExamsModal } from '../../../state/actions/exam';
   import previewExamModal from '../exams-page/preview-exam-modal';
-  import kButton from 'kolibri.coreVue.components.kButton';
+
   export default {
     name: 'previewNewExamModal',
     $trs: { randomize: 'Randomize questions' },
@@ -54,4 +56,9 @@
 </script>
 
 
-<style lang="stylus" scoped></style>
+<style lang="stylus" scoped>
+
+  .randomize-btn
+    margin: 0 0 0 8px
+
+</style>

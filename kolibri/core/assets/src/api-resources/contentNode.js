@@ -1,5 +1,5 @@
-import { Resource } from '../api-resource';
 import logger from 'kolibri.lib.logging';
+import { Resource } from '../api-resource';
 
 const logging = logger.getLogger(__filename);
 
@@ -10,21 +10,62 @@ export default class ContentNodeResource extends Resource {
   static idKey() {
     return 'pk';
   }
+  static usesContentCacheKey() {
+    return true;
+  }
   getDescendantsCollection(id, getParams = {}) {
     if (!id) {
       throw TypeError('An id must be specified');
     }
+    this.descendantsCache = this.descendantsCache || {};
     // Add the id to the getParams for cache identification
     getParams.modelId = id;
     let collection;
     const key = this.cacheKey(getParams);
-    if (!this.collections[key]) {
+    if (!this.descendantsCache[key]) {
       collection = this.createCollection({}, getParams, []);
       collection.url = (...args) => this.urls[`${this.name}-descendants`](...args, id);
+      this.descendantsCache[key] = collection;
     } else {
-      collection = this.collections[key];
+      collection = this.descendantsCache[key];
     }
     return collection;
+  }
+  fetchDescendantsAssessments(id) {
+    if (!id) {
+      throw TypeError('An id must be specified');
+    }
+    let promise;
+    this.descendantsAssessments = this.descendantsAssessments || {};
+    const key = this.cacheKey({ id });
+    if (!this.descendantsAssessments[key]) {
+      const url = this.urls[`${this.name}-descendants-assessments`](id);
+      promise = this.client({ path: url }).then(response => {
+        this.descendantsAssessments[key] = response.entity;
+        return Promise.resolve(response.entity);
+      });
+    } else {
+      promise = Promise.resolve(this.descendantsAssessments[key]);
+    }
+    return promise;
+  }
+  fetchNodeAssessments(ids) {
+    if (!Array.isArray(ids)) {
+      throw TypeError('Ids must be an Array');
+    }
+    let promise;
+    this.nodeAssessments = this.nodeAssessments || {};
+    const key = this.cacheKey({ ids });
+    if (!this.nodeAssessments[key]) {
+      const url = this.urls[`${this.name}-node-assessments`]();
+      promise = this.client({ path: url, params: { ids } }).then(response => {
+        this.nodeAssessments[key] = response.entity;
+        return Promise.resolve(response.entity);
+      });
+    } else {
+      promise = Promise.resolve(this.nodeAssessments[key]);
+    }
+    return promise;
   }
   fetchAncestors(id) {
     if (!id) {
@@ -35,7 +76,10 @@ export default class ContentNodeResource extends Resource {
     const key = this.cacheKey({ id });
     if (!this.ancestor_cache[key]) {
       const url = this.urls[`${this.name}-ancestors`](id);
-      promise = this.client({ path: url }).then(response => {
+      const params = {
+        contentCacheKey: this.contentCacheKey,
+      };
+      promise = this.client({ path: url, cacheBust: false, params }).then(response => {
         if (Array.isArray(response.entity)) {
           this.ancestor_cache[key] = response.entity;
           return Promise.resolve(response.entity);
@@ -48,6 +92,37 @@ export default class ContentNodeResource extends Resource {
     }
     return promise;
   }
+
+  getCopies(content_id) {
+    if (!content_id) {
+      throw TypeError('A content_id must be specified');
+    }
+    let promise;
+    this.copies_cache = this.copies_cache || {};
+    const key = this.cacheKey({ content_id });
+    if (!this.copies_cache[key]) {
+      const url = this.urls[`${this.name}-copies`](content_id);
+
+      promise = this.client({ path: url }).then(response => {
+        if (Array.isArray(response.entity)) {
+          this.copies_cache[key] = response.entity;
+          return Promise.resolve(response.entity);
+        }
+        logging.debug('Data appears to be malformed', response.entity);
+        return Promise.reject(response);
+      });
+    } else {
+      promise = Promise.resolve(this.copies_cache[key]);
+    }
+    return promise;
+  }
+
+  getCopiesCount(getParams = {}) {
+    const collection = this.createCollection({}, getParams, []);
+    collection.url = (...args) => this.urls[`${this.name}-copies-count`](...args);
+    return collection;
+  }
+
   fetchNextContent(id) {
     if (!id) {
       throw TypeError('An id must be specified');
@@ -57,7 +132,10 @@ export default class ContentNodeResource extends Resource {
     const key = this.cacheKey({ id });
     if (!this.next_cache[key]) {
       const url = this.urls[`${this.name}_next_content`](id);
-      promise = this.client({ path: url }).then(response => {
+      const params = {
+        contentCacheKey: this.contentCacheKey,
+      };
+      promise = this.client({ path: url, cacheBust: false, params }).then(response => {
         if (Object(response.entity) === response.entity) {
           this.next_cache[key] = response.entity;
           return Promise.resolve(response.entity);

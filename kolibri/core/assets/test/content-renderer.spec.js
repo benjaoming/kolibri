@@ -1,11 +1,19 @@
 /* eslint-env mocha */
+import { expect } from 'chai';
 import Vue from 'vue-test'; // eslint-disable-line
-import contentRenderer from '../src/views/content-renderer';
 import { mount } from '@vue/test-utils';
-import assert from 'assert';
 import sinon from 'sinon';
+import contentRenderer from '../src/views/content-renderer';
 
 describe('contentRenderer Component', () => {
+  before(() => {
+    Vue.prototype.Kolibri = {
+      canRenderContent: () => true,
+    };
+  });
+  after(() => {
+    Vue.prototype.Kolibri = {};
+  });
   const defaultFiles = [
     {
       available: true,
@@ -27,8 +35,14 @@ describe('contentRenderer Component', () => {
         const wrapper = mount(contentRenderer, {
           propsData: defaultPropsDataFromFiles(files),
         });
-        assert.equal(wrapper.vm.availableFiles.length, expected);
+        expect(wrapper.vm.availableFiles.length).to.equal(expected);
       }
+
+      it('should be 0 if the mediator concludes that there are no compatible renderers', () => {
+        Vue.prototype.Kolibri.canRenderContent = () => false;
+        testAvailableFiles(defaultFiles, 0);
+        Vue.prototype.Kolibri.canRenderContent = () => true;
+      });
 
       it('should be 1 when there is one available file', () => {
         testAvailableFiles(defaultFiles, 1);
@@ -66,7 +80,7 @@ describe('contentRenderer Component', () => {
         const wrapper = mount(contentRenderer, {
           propsData: defaultPropsDataFromFiles(files),
         });
-        assert.equal(wrapper.vm.defaultFile, expected);
+        expect(wrapper.vm.defaultFile).to.equal(expected);
       }
 
       it('should be the file when there is one available file', () => {
@@ -83,7 +97,7 @@ describe('contentRenderer Component', () => {
         const wrapper = mount(contentRenderer, {
           propsData: defaultPropsDataFromFiles(files),
         });
-        assert.equal(wrapper.vm.extension, expected);
+        expect(wrapper.vm.extension).to.equal(expected);
       }
 
       it("should be the file's extension when there is one available file", () => {
@@ -102,13 +116,11 @@ describe('contentRenderer Component', () => {
         describe('when renderer is available', () => {
           const dummyComponent = { test: 'testing' };
           before(() => {
-            Vue.prototype.Kolibri = {
-              retrieveContentRenderer: () => Promise.resolve(dummyComponent),
-            };
+            Vue.prototype.Kolibri.retrieveContentRenderer = () => Promise.resolve(dummyComponent);
           });
 
           after(() => {
-            Vue.prototype.Kolibri = {};
+            delete Vue.prototype.Kolibri.retrieveContentRenderer;
           });
 
           it('should set currentViewClass to returned component', () => {
@@ -119,7 +131,7 @@ describe('contentRenderer Component', () => {
               propsData: props,
             });
             return Vue.nextTick().then(() => {
-              assert.deepEqual(wrapper.vm.currentViewClass, dummyComponent);
+              expect(wrapper.vm.currentViewClass).to.deep.equal(dummyComponent);
             });
           });
 
@@ -132,20 +144,19 @@ describe('contentRenderer Component', () => {
               propsData: props,
             });
             return Vue.nextTick().then(() => {
-              assert.ok(wrapper.vm.initSession.calledOnce);
+              sinon.assert.calledOnce(wrapper.vm.initSession);
             });
           });
         });
 
         describe('when no renderer is available', () => {
           before(() => {
-            Vue.prototype.Kolibri = {
-              retrieveContentRenderer: () => Promise.reject({ message: 'oh no' }),
-            };
+            Vue.prototype.Kolibri.retrieveContentRenderer = () =>
+              Promise.reject({ message: 'oh no' });
           });
 
           after(() => {
-            Vue.prototype.Kolibri = {};
+            delete Vue.prototype.Kolibri.retrieveContentRenderer;
           });
 
           it('calling updateRendererComponent should set noRendererAvailable to true', () => {
@@ -158,7 +169,7 @@ describe('contentRenderer Component', () => {
             // 'created' hook runs it once. Running it here again for testing.
             // TODO Look into how to do this without calling the method directly
             return wrapper.vm.updateRendererComponent().then(() => {
-              assert.equal(wrapper.vm.noRendererAvailable, true);
+              expect(wrapper.vm.noRendererAvailable).to.be.true;
             });
           });
         });
@@ -174,7 +185,7 @@ describe('contentRenderer Component', () => {
           });
           // 'created' hook runs it once. Running it here again for testing.
           return wrapper.vm.updateRendererComponent().then(component => {
-            assert.equal(component, null);
+            expect(component).to.equal(null);
           });
         });
       });

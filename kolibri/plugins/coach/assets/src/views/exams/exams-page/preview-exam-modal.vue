@@ -1,29 +1,38 @@
 <template>
 
   <core-modal
+    ref="modal"
     :title="$tr('preview')"
     @cancel="close"
-    width="100%"
-    height="100%"
+    :width="`${windowSize.width - 16}px`"
+    :height="`${windowSize.height - 16}px`"
   >
-    <k-button
-      :text="$tr('close')"
-      :primary="false"
-      @click="close"
-    />
     <transition mode="out-in">
-      <ui-progress-linear v-if="loading" />
+      <k-circular-loader
+        v-if="loading"
+        :delay="false"
+      />
+      <div class="no-exercise-x" v-else-if="exerciseContentNodes.length === 0">
+        <mat-svg category="navigation" name="close" />
+      </div>
       <div v-else>
-        <div>
-          <strong>{{ $tr('numQuestions', { num: examNumQuestions }) }}</strong>
+        <div ref="header">
+          <strong>{{ $tr('numQuestions', { num: availableExamQuestionSources.length }) }}</strong>
           <slot name="randomize-button"></slot>
         </div>
-        <k-grid class="exam-preview-container">
+        <k-grid
+          class="exam-preview-container"
+          :style="{ maxHeight: `${maxHeight}px` }"
+        >
           <k-grid-item size="1" cols="3" class="question-selector">
-            <div v-for="(exercise, exerciseIndex) in examQuestionSources" :key="exerciseIndex">
+            <div
+              v-for="(exercise, exerciseIndex) in availableExamQuestionSources"
+              :key="exerciseIndex"
+            >
               <h3 v-if="examCreation">{{ getExerciseName(exercise.exercise_id) }}</h3>
               <ol class="question-list">
                 <li
+                  class="question-list-item"
                   v-for="(question, questionIndex) in getExerciseQuestions(exercise.exercise_id)"
                   :key="questionIndex"
                 >
@@ -35,6 +44,11 @@
                       'question',
                       { num: getQuestionIndex(question.itemId, exercise.exercise_id) + 1 }
                     )"
+                  />
+                  <coach-content-label
+                    class="coach-content-label"
+                    :value="numCoachContents(exercise)"
+                    :isTopic="false"
                   />
                 </li>
               </ol>
@@ -60,6 +74,13 @@
         </k-grid>
       </div>
     </transition>
+    <div class="close-btn-wrapper">
+      <k-button
+        :text="$tr('close')"
+        :primary="true"
+        @click="close"
+      />
+    </div>
   </core-modal>
 
 </template>
@@ -67,15 +88,20 @@
 
 <script>
 
-  import { setExamsModal } from '../../../state/actions/exam';
+  import find from 'lodash/find';
   import { ContentNodeResource } from 'kolibri.resources';
   import { createQuestionList, selectQuestionFromExercise } from 'kolibri.utils.exams';
+  import coachContentLabel from 'kolibri.coreVue.components.coachContentLabel';
   import coreModal from 'kolibri.coreVue.components.coreModal';
   import contentRenderer from 'kolibri.coreVue.components.contentRenderer';
   import kButton from 'kolibri.coreVue.components.kButton';
   import kGrid from 'kolibri.coreVue.components.kGrid';
   import kGridItem from 'kolibri.coreVue.components.kGridItem';
-  import uiProgressLinear from 'keen-ui/src/UiProgressLinear';
+  import kCircularLoader from 'kolibri.coreVue.components.kCircularLoader';
+  import responsiveWindow from 'kolibri.coreVue.mixins.responsiveWindow';
+  import debounce from 'lodash/debounce';
+  import { setExamsModal } from '../../../state/actions/exam';
+
   export default {
     name: 'previewExamModal',
     $trs: {
@@ -86,13 +112,15 @@
       exercise: 'Exercise { num }',
     },
     components: {
+      coachContentLabel,
       coreModal,
       contentRenderer,
       kButton,
       kGrid,
       kGridItem,
-      uiProgressLinear,
+      kCircularLoader,
     },
+    mixins: [responsiveWindow],
     props: {
       examQuestionSources: {
         type: Array,
@@ -115,11 +143,20 @@
       currentQuestionIndex: 0,
       exercises: {},
       loading: true,
+      maxHeight: null,
     }),
     computed: {
+      debouncedSetMaxHeight() {
+        return debounce(this.setMaxHeight, 250);
+      },
+      availableExamQuestionSources() {
+        return this.examQuestionSources.filter(questionSource => {
+          return this.exercises[questionSource.exercise_id];
+        });
+      },
       questions() {
         return Object.keys(this.exercises).length
-          ? createQuestionList(this.examQuestionSources).map(question => ({
+          ? createQuestionList(this.availableExamQuestionSources).map(question => ({
               itemId: selectQuestionFromExercise(
                 question.assessmentItemIndex,
                 this.examSeed,
@@ -142,10 +179,28 @@
     watch: {
       examQuestionSources: 'setExercises',
     },
+    updated() {
+      this.debouncedSetMaxHeight();
+    },
     created() {
       this.setExercises();
     },
     methods: {
+      setMaxHeight() {
+        const title = this.$refs.modal.$el.querySelector('#modal-title');
+        const header = this.$refs.header;
+        if (title && header) {
+          const titleHeight = title.clientHeight;
+          const headerHeight = header.clientHeight;
+          const closeBtnHeight = 44;
+          const margins = 16 * 6;
+          this.maxHeight =
+            this.windowSize.height - titleHeight - headerHeight - closeBtnHeight - margins;
+        }
+      },
+      numCoachContents(exercise) {
+        return find(this.exerciseContentNodes, { id: exercise.exercise_id }).num_coach_contents;
+      },
       setExercises() {
         this.loading = true;
         ContentNodeResource.getCollection({
@@ -186,7 +241,14 @@
         return this.questions.filter(q => q.contentId === exerciseId);
       },
     },
-    vuex: { actions: { setExamsModal } },
+    vuex: {
+      actions: {
+        setExamsModal,
+      },
+      getters: {
+        exerciseContentNodes: state => state.pageState.exerciseContentNodes,
+      },
+    },
   };
 
 </script>
@@ -196,9 +258,25 @@
 
   @require '~kolibri.styles.definitions'
 
+  .question-list-item
+    vertical-align: middle
+
+  .coach-content-label
+    display: inline-block
+    vertical-align: inherit
+
   .exam-preview-container
-    padding-top: 1em
-    max-height: calc(100vh - 160px)
+    margin-top: 16px
+
+  .close-btn-wrapper
+    text-align: right
+    button
+      margin-right: 0
+      margin-bottom: 0
+
+  >>>.modal
+    max-width: unset
+    max-height: unset
 
   .question-selector, .exercise-container
     overflow-y: auto
@@ -213,5 +291,11 @@
   h3
     margin-top: 1em
     margin-bottom: 0.25em
+
+  .no-exercise-x
+    text-align: center
+    svg
+      height: 200px
+      width: 200px
 
 </style>

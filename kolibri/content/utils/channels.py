@@ -2,11 +2,10 @@ import fnmatch
 import logging as logger
 import os
 
+from .paths import get_content_database_dir_path
+from .sqlalchemybridge import Bridge
 from kolibri.core.discovery.utils.filesystem import enumerate_mounted_disk_partitions
 from kolibri.utils.uuids import is_valid_uuid
-
-from .paths import get_content_database_folder_path
-from .sqlalchemybridge import Bridge
 
 logging = logger.getLogger(__name__)
 
@@ -60,13 +59,23 @@ def read_channel_metadata_from_db_file(channeldbpath):
 
     source_channel_metadata = source.session.query(ChannelMetadataClass).all()[0]
 
+    # Use the inferred version from the SQLAlchemy Bridge object, and set it as additional
+    # metadata on the channel data
+
+    source_channel_metadata.inferred_schema_version = source.schema_version
+
     source.end()
+
+    # Adds an attribute `root_id` when `root_id` does not exist to match with
+    # the latest schema.
+    if not hasattr(source_channel_metadata, 'root_id'):
+        setattr(source_channel_metadata, 'root_id', getattr(source_channel_metadata, 'root_pk'))
 
     return source_channel_metadata
 
 def get_channels_for_data_folder(datafolder):
     channels = []
-    for path in enumerate_content_database_file_paths(get_content_database_folder_path(datafolder)):
+    for path in enumerate_content_database_file_paths(get_content_database_dir_path(datafolder)):
         channel = read_channel_metadata_from_db_file(path)
         channel_data = {
             "path": path,
@@ -75,7 +84,7 @@ def get_channels_for_data_folder(datafolder):
             "description": channel.description,
             "thumbnail": channel.thumbnail,
             "version": channel.version,
-            "root": channel.root_pk,
+            "root": channel.root_id,
             "author": channel.author,
             "last_updated": getattr(channel, 'last_updated', None),
             "lang_code": getattr(channel, 'lang_code', None),

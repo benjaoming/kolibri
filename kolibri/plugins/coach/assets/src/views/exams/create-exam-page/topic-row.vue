@@ -3,20 +3,26 @@
   <tr>
     <th class="core-table-checkbox-col">
       <k-checkbox
+        v-if="!channel"
         :label="$tr('selectTopic')"
         :showLabel="false"
         :checked="allExercisesWithinTopicSelected"
         :indeterminate="someExercisesWithinTopicSelected"
-        :disabled="!topicHasExercises"
         @change="changeSelection"
       />
     </th>
     <td class="core-table-main-col">
-      <content-icon :kind="topic" :class="{ disabled: !topicHasExercises }" />
-      <button v-if="topicHasExercises" class="title" @click="$emit('goToTopic', topicId)">
-        {{ topicTitle }}
-      </button>
-      <span v-else class="disabled">{{ topicTitle }}</span>
+      <div class="topic-title">
+        <content-icon :kind="topic" :class="{ disabled: !topicHasExercises }" />
+        <button class="title" @click="$emit('goToTopic', topicId)">
+          {{ topicTitle }}
+        </button>
+      </div>
+      <coach-content-label
+        class="coach-content-label"
+        :value="numCoachContents"
+        :isTopic="true"
+      />
     </td>
     <td>
       <template v-if="!noExercisesWithinTopicSelected">
@@ -36,9 +42,11 @@
 <script>
 
   import { ContentNodeKinds } from 'kolibri.coreVue.vuex.constants';
+  import coachContentLabel from 'kolibri.coreVue.components.coachContentLabel';
   import contentIcon from 'kolibri.coreVue.components.contentIcon';
   import kButton from 'kolibri.coreVue.components.kButton';
   import kCheckbox from 'kolibri.coreVue.components.kCheckbox';
+
   export default {
     name: 'topicRow',
     $trs: {
@@ -47,11 +55,16 @@
       selectTopic: 'Select topic',
     },
     components: {
+      coachContentLabel,
       contentIcon,
       kButton,
       kCheckbox,
     },
     props: {
+      channel: {
+        type: Boolean,
+        default: false,
+      },
       topicId: {
         type: String,
         requires: true,
@@ -59,6 +72,10 @@
       topicTitle: {
         type: String,
         required: true,
+      },
+      numCoachContents: {
+        type: Number,
+        default: 0,
       },
       selectedExercises: {
         type: Array,
@@ -125,10 +142,20 @@
 
   @require '~kolibri.styles.definitions'
 
+  .topic-title
+    display: inline-block
+
+  .coach-content-label
+    display: inline-block
+    vertical-align: bottom
+    margin-left: 8px
+
   .title
     padding: 0
     border: none
     font-size: 1em
+    color: $core-action-normal
+    text-decoration: underline
 
   .disabled
     color: $core-text-disabled

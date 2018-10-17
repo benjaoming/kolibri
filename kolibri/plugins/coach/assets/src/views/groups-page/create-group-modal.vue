@@ -13,6 +13,7 @@
           :autofocus="true"
           :invalid="nameIsInvalid"
           :invalidText="nameIsInvalidText"
+          :maxlength="50"
           @blur="nameBlurred = true"
           v-model.trim="name"
         />
@@ -39,10 +40,11 @@
 
 <script>
 
-  import { displayModal, createGroup } from '../../state/actions/group';
   import coreModal from 'kolibri.coreVue.components.coreModal';
   import kTextbox from 'kolibri.coreVue.components.kTextbox';
   import kButton from 'kolibri.coreVue.components.kButton';
+  import { displayModal, createGroup } from '../../state/actions/group';
+
   export default {
     name: 'createGroupModal',
     $trs: {

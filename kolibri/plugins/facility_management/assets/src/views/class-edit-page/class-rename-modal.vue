@@ -13,6 +13,7 @@
           :autofocus="true"
           :invalid="nameIsInvalid"
           :invalidText="nameIsInvalidText"
+          :maxlength="50"
           @blur="nameBlurred = true"
           v-model.trim="name"
         />
@@ -40,10 +41,11 @@
 
 <script>
 
-  import { updateClass, displayModal } from '../../state/actions';
   import kButton from 'kolibri.coreVue.components.kButton';
   import coreModal from 'kolibri.coreVue.components.coreModal';
   import kTextbox from 'kolibri.coreVue.components.kTextbox';
+  import { updateClass, displayModal } from '../../state/actions';
+
   export default {
     name: 'classRenameModal',
     $trs: {
@@ -83,7 +85,8 @@
     },
     computed: {
       duplicateName() {
-        if (this.name === this.classname) {
+        // if same name, different case
+        if (this.name.toUpperCase() === this.classname.toUpperCase()) {
           return false;
         }
         const index = this.classes.findIndex(

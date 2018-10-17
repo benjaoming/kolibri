@@ -76,9 +76,9 @@
 
   import CoreInfoIcon from 'kolibri.coreVue.components.CoreInfoIcon';
   import contentIcon from 'kolibri.coreVue.components.contentIcon';
-  import StatusIcon from './StatusIcon';
   import kButton from 'kolibri.coreVue.components.kButton';
   import { CollectionKinds } from 'kolibri.coreVue.vuex.constants';
+  import StatusIcon from './StatusIcon';
 
   export default {
     name: 'assignmentSummary',
@@ -171,7 +171,7 @@
     color: $core-text-annotation // same as table header
     font-size: $table-header-size
     margin-top: 16px
-    margin-bottom: 16px
+    margin-bottom: 8px
 
   dd
     margin-left: 0

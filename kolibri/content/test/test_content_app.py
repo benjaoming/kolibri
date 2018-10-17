@@ -2,6 +2,7 @@
 To run this test, type this in command line <kolibri manage test -- kolibri.content>
 """
 import datetime
+import uuid
 from collections import namedtuple
 
 import mock
@@ -9,7 +10,7 @@ import requests
 from django.core.cache import cache
 from django.core.urlresolvers import reverse
 from django.db.models import Q
-from django.test import TestCase
+from django.utils import timezone
 from le_utils.constants import content_kinds
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -21,6 +22,7 @@ from kolibri.auth.test.helpers import provision_device
 from kolibri.content import models as content
 from kolibri.core.device.models import DevicePermissions
 from kolibri.core.device.models import DeviceSettings
+from kolibri.logger.models import ContentSessionLog
 from kolibri.logger.models import ContentSummaryLog
 
 DUMMY_PASSWORD = "password"
@@ -136,10 +138,6 @@ class ContentNodeTestBase(object):
         self.assertFalse(content.File.objects.all().exists())
 
 
-class ContentNodeTestCase(ContentNodeTestBase, TestCase):
-    fixtures = ['content_test.json']
-
-
 class ContentNodeAPITestCase(APITestCase):
     """
     Testcase for content API methods
@@ -149,6 +147,11 @@ class ContentNodeAPITestCase(APITestCase):
 
     def setUp(self):
         provision_device()
+        self.facility = Facility.objects.create(name='facility')
+        self.admin = FacilityUser.objects.create(username='admin', facility=self.facility)
+        self.admin.set_password(DUMMY_PASSWORD)
+        self.admin.save()
+        self.facility.add_admin(self.admin)
 
     def _reverse_channel_url(self, pattern_name, kwargs={}):
         """Helper method to reverse a URL using the current channel ID"""
@@ -182,16 +185,46 @@ class ContentNodeAPITestCase(APITestCase):
         content.ContentNode.objects.all().update(available=False)
         response = self.client.get(reverse("contentnode_granular-detail", kwargs={"pk": c1_id}))
         self.assertEqual(
-            response.data, {
-                "pk": c1_id, "title": "root", "kind": "topic", "available": False,
-                "total_resources": 1, "on_device_resources": 0, "importable": True, "children": [
+            response.data,
+            {
+                "pk": c1_id,
+                "id": c1_id,
+                "title": "root",
+                "kind": "topic",
+                "available": False,
+                "total_resources": 1,
+                "on_device_resources": 0,
+                "coach_content": False,
+                "importable": True,
+                "num_coach_contents": 0,
+                "children": [
                     {
-                        "pk": c2_id, "title": "c1", "kind": "video", "available": False,
-                        "total_resources": 1, "on_device_resources": 0, "importable": True
+                        "pk": c2_id,
+                        "id": c2_id,
+                        "title": "c1",
+                        "kind": "video",
+                        "available": False,
+                        "total_resources": 1,
+                        "on_device_resources": 0,
+                        "importable": True,
+                        "coach_content": False,
+                        "num_coach_contents": 0,
                     },
                     {
-                        "pk": c3_id, "title": "c2", "kind": "topic", "available": False,
-                        "total_resources": 0, "on_device_resources": 0, "importable": True}]})
+                        "pk": c3_id,
+                        "id": c3_id,
+                        "title": "c2",
+                        "kind": "topic",
+                        "available": False,
+                        "total_resources": 0,
+                        "on_device_resources": 0,
+                        "importable": True,
+                        "coach_content": False,
+                        "num_coach_contents": 0,
+                    }
+                ]
+            }
+        )
 
     @mock.patch('kolibri.content.serializers.get_mounted_drives_with_channel_info')
     def test_contentnode_granular_local_import(self, drive_mock):
@@ -209,27 +242,63 @@ class ContentNodeAPITestCase(APITestCase):
             reverse("contentnode_granular-detail", kwargs={"pk": c1_id}), {"importing_from_drive_id": "123"})
         self.assertEqual(
             response.data, {
-                "pk": c1_id, "title": "root", "kind": "topic", "available": False,
-                "total_resources": 1, "on_device_resources": 0, "importable": True,
+                "pk": c1_id,
+                "id": c1_id,
+                "title": "root",
+                "kind": "topic",
+                "available": False,
+                "total_resources": 1,
+                "on_device_resources": 0,
+                "importable": True,
+                "coach_content": False,
+                "num_coach_contents": 0,
                 "children": [
                     {
-                        "pk": c2_id, "title": "c1", "kind": "video", "available": False,
-                        "total_resources": 1, "on_device_resources": 0, "importable": False
+                        "pk": c2_id,
+                        "id": c2_id,
+                        "title": "c1",
+                        "kind": "video",
+                        "available": False,
+                        "total_resources": 1,
+                        "on_device_resources": 0,
+                        "importable": False,
+                        "coach_content": False,
+                        "num_coach_contents": 0,
                     },
                     {
-                        "pk": c3_id, "title": "c2", "kind": "topic", "available": False,
-                        "total_resources": 0, "on_device_resources": 0, "importable": True
-                    }]
-            })
+                        "pk": c3_id,
+                        "id": c3_id,
+                        "title": "c2",
+                        "kind": "topic",
+                        "available": False,
+                        "total_resources": 0,
+                        "on_device_resources": 0,
+                        "importable": True,
+                        "coach_content": False,
+                        "num_coach_contents": 0,
+                    }
+                ]
+            }
+        )
 
     def test_contentnode_granular_export_available(self):
         c1_id = content.ContentNode.objects.get(title="c1").id
         response = self.client.get(reverse("contentnode_granular-detail", kwargs={"pk": c1_id}))
         self.assertEqual(
             response.data, {
-                "pk": c1_id, "title": "c1", "kind": "video", "available": True,
-                "total_resources": 1, "on_device_resources": 1, "importable": True,
-                "children": []})
+                "pk": c1_id,
+                "id": c1_id,
+                "title": "c1",
+                "kind": "video",
+                "available": True,
+                "total_resources": 1,
+                "on_device_resources": 1,
+                "importable": True,
+                "children": [],
+                "coach_content": False,
+                "num_coach_contents": 0,
+            }
+        )
 
     def test_contentnode_granular_export_unavailable(self):
         c1_id = content.ContentNode.objects.get(title="c1").id
@@ -237,24 +306,34 @@ class ContentNodeAPITestCase(APITestCase):
         response = self.client.get(reverse("contentnode_granular-detail", kwargs={"pk": c1_id}))
         self.assertEqual(
             response.data, {
-                "pk": c1_id, "title": "c1", "kind": "video", "available": False,
-                "total_resources": 1, "on_device_resources": 0, "importable": True,
-                "children": []})
+                "pk": c1_id,
+                "id": c1_id,
+                "title": "c1",
+                "kind": "video",
+                "available": False,
+                "total_resources": 1,
+                "on_device_resources": 0,
+                "importable": True,
+                "children": [],
+                "coach_content": False,
+                "num_coach_contents": 0,
+            }
+        )
 
     def test_contentnodefilesize_resourcenode(self):
         c1_id = content.ContentNode.objects.get(title="c1").id
-        content.LocalFile.objects.filter(pk="9f9438fe6b0d42dd8e913d7d04cfb2b2").update(file_size=2)
-        content.LocalFile.objects.filter(pk="725257a0570044acbd59f8cf6a68b2be").update(file_size=1, available=False)
+        content.LocalFile.objects.filter(pk="6bdfea4a01830fdd4a585181c0b8068c").update(file_size=2)
+        content.LocalFile.objects.filter(pk="211523265f53825b82f70ba19218a02e").update(file_size=1, available=False)
         response = self.client.get(reverse("contentnodefilesize-detail", kwargs={"pk": c1_id}))
         self.assertEqual(response.data, {"total_file_size": 3, "on_device_file_size": 2})
 
     def test_contentnodefilesize_topicnode(self):
         root_id = content.ContentNode.objects.get(title="root").id
-        content.LocalFile.objects.filter(pk="9f9438fe6b0d42dd8e913d7d04cfb2b2").update(file_size=2)
-        content.LocalFile.objects.filter(pk="725257a0570044acbd59f8cf6a68b2be").update(file_size=1, available=False)
+        content.LocalFile.objects.filter(pk="6bdfea4a01830fdd4a585181c0b8068c").update(file_size=2)
+        content.LocalFile.objects.filter(pk="211523265f53825b82f70ba19218a02e").update(file_size=1, available=False)
         content.LocalFile.objects.filter(pk="e00699f859624e0f875ac6fe1e13d648").update(file_size=3)
         response = self.client.get(reverse("contentnodefilesize-detail", kwargs={"pk": root_id}))
-        self.assertEqual(response.data, {"total_file_size": 6, "on_device_file_size": 5})
+        self.assertEqual(response.data, {"total_file_size": 6, "on_device_file_size": 2})
 
     def test_contentnode_retrieve(self):
         c1_id = content.ContentNode.objects.get(title="c1").id
@@ -273,10 +352,43 @@ class ContentNodeAPITestCase(APITestCase):
         response = self.client.get(self._reverse_channel_url("contentnode-list"), data={"recommendations_for": id})
         self.assertEqual(len(response.data), 2)
 
+    def test_contentnode_recommendations_does_not_error_for_unavailable_node(self):
+        node = content.ContentNode.objects.get(title="c2c2")
+        node.available = False
+        node.save()
+        id = node.id
+        response = self.client.get(self._reverse_channel_url("contentnode-list"), data={"recommendations_for": id})
+        self.assertEqual(len(response.data), 2)
+
     def test_contentnode_allcontent(self):
-        nodes = content.ContentNode.objects.exclude(kind=content_kinds.TOPIC).count()
+        nodes = content.ContentNode.objects.exclude(kind=content_kinds.TOPIC).filter(available=True).count()
         response = self.client.get(self._reverse_channel_url("contentnode-all-content"))
         self.assertEqual(len(response.data), nodes)
+
+    def test_contentnodeslim_ids(self):
+        titles = ["c2c2", "c2c3"]
+        nodes = [content.ContentNode.objects.get(title=title) for title in titles]
+        response = self.client.get(self._reverse_channel_url("contentnode_slim-list"), data={"ids": ','.join([n.id for n in nodes])})
+        self.assertEqual(len(response.data), 2)
+        for i in range(len(titles)):
+            self.assertEqual(response.data[i]["title"], titles[i])
+
+    def test_contentnodeslim_parent(self):
+        parent = content.ContentNode.objects.get(title="c2")
+        children = parent.get_children()
+        response = self.client.get(self._reverse_channel_url("contentnode_slim-list"), data={"parent": parent.id, "by_role": True})
+        self.assertEqual(len(response.data), children.count())
+        for i in range(len(children)):
+            self.assertEqual(response.data[i]['title'], children[i].title)
+
+    def test_contentnodeslim_ancestors(self):
+        node = content.ContentNode.objects.get(title="c2c2")
+        ancestors = node.get_ancestors()
+        ancestors_titles = {n.title for n in ancestors}
+        response = self.client.get(self._reverse_channel_url("contentnode_slim-ancestors", kwargs={"pk": node.id}))
+        response_titles = {n['title'] for n in response.data}
+        self.assertEqual(len(response.data), ancestors.count())
+        self.assertEqual(ancestors_titles, response_titles)
 
     def test_channelmetadata_list(self):
         response = self.client.get(reverse("channel-list", kwargs={}))
@@ -291,10 +403,11 @@ class ContentNodeAPITestCase(APITestCase):
         data = content.ChannelMetadata.objects.values()[0]
         c1_id = content.ContentNode.objects.get(title="c1").id
         content.ContentNode.objects.filter(pk=c1_id).update(available=False)
-        response = self.client.get(reverse("channel-detail", kwargs={'pk': data["id"]}), {'file_sizes': True})
+        get_params = {'include_fields': 'total_resources,total_file_size,on_device_resources,on_device_file_size'}
+        response = self.client.get(reverse("channel-detail", kwargs={'pk': data["id"]}), get_params)
         self.assertEqual(response.data['total_resources'], 1)
         self.assertEqual(response.data['total_file_size'], 0)
-        self.assertEqual(response.data['on_device_resources'], 0)
+        self.assertEqual(response.data['on_device_resources'], 4)
         self.assertEqual(response.data['on_device_file_size'], 0)
 
     def test_channelmetadata_langfield(self):
@@ -336,41 +449,61 @@ class ContentNodeAPITestCase(APITestCase):
         response = self.client.get(reverse("channel-list"))
         self.assertEqual(response.data[0]["available"], False)
 
-    def test_channelmetadata_file_sizes_filter_has_total_resources(self):
-        response = self.client.get(reverse("channel-list"), {"file_sizes": True})
+    def test_channelmetadata_include_fields_filter_has_total_resources(self):
+        response = self.client.get(reverse("channel-list"), {'include_fields': 'total_resources'})
         self.assertEqual(response.data[0]["total_resources"], 1)
 
-    def test_channelmetadata_file_sizes_filter_has_total_file_size(self):
+    def test_channelmetadata_include_fields_filter_has_total_file_size(self):
         content.LocalFile.objects.filter(files__contentnode__channel_id=self.the_channel_id).update(file_size=1)
-        response = self.client.get(reverse("channel-list"), {"file_sizes": True})
+        response = self.client.get(reverse("channel-list"), {'include_fields': 'total_file_size'})
         self.assertEqual(response.data[0]["total_file_size"], 2)
 
-    def test_channelmetadata_file_sizes_filter_has_on_device_resources(self):
-        response = self.client.get(reverse("channel-list"), {"file_sizes": True})
-        self.assertEqual(response.data[0]["on_device_resources"], 1)
+    def test_channelmetadata_include_fields_filter_has_on_device_resources(self):
+        response = self.client.get(reverse("channel-list"), {'include_fields': 'on_device_resources'})
+        self.assertEqual(response.data[0]["on_device_resources"], 5)
 
-    def test_channelmetadata_file_sizes_filter_has_on_device_file_size(self):
+    def test_channelmetadata_include_fields_filter_has_on_device_file_size(self):
         content.LocalFile.objects.filter(files__contentnode__channel_id=self.the_channel_id).update(file_size=1)
-        response = self.client.get(reverse("channel-list"), {"file_sizes": True})
-        self.assertEqual(response.data[0]["on_device_file_size"], 2)
+        response = self.client.get(reverse("channel-list"), {'include_fields': 'on_device_file_size'})
+        self.assertEqual(response.data[0]["on_device_file_size"], 4)
 
-    def test_channelmetadata_file_sizes_filter_has_no_on_device_file_size(self):
+    def test_channelmetadata_include_fields_filter_has_no_on_device_file_size(self):
         content.LocalFile.objects.filter(files__contentnode__channel_id=self.the_channel_id).update(available=True)
-        response = self.client.get(reverse("channel-list"), {"file_sizes": True})
+        response = self.client.get(reverse("channel-list"), {'include_fields': 'total_resources,total_file_size,on_device_resources,on_device_file_size'})
         self.assertEqual(response.data[0]["on_device_file_size"], 0)
 
-    @mock.patch.object(kolibri.content.serializers, 'renderable_contentnodes_q_filter', Q(kind=content_kinds.TOPIC))
-    def test_channelmetadata_file_sizes_filter_has_no_renderable_on_device_file_size(self):
+    @mock.patch.object(kolibri.content.serializers, 'renderable_contentnodes_without_topics_q_filter', Q(kind="dummy"))
+    def test_channelmetadata_include_fields_filter_has_no_renderable_on_device_file_size(self):
         content.LocalFile.objects.filter(files__contentnode__channel_id=self.the_channel_id).update(file_size=1)
-        response = self.client.get(reverse("channel-list"), {"file_sizes": True})
-        self.assertEqual(response.data[0]["on_device_file_size"], 0)
+        response = self.client.get(reverse("channel-list"), {'include_fields': 'on_device_file_size'})
+        self.assertEqual(response.data[0]["on_device_file_size"], 4)
+
+    def test_channelmetadata_has_exercises_filter(self):
+        # Has nothing else for that matter...
+        no_exercise_channel = content.ContentNode.objects.create(
+            pk="6a406ac66b224106aa2e93f73a94333d",
+            channel_id="f8ec4a5d14cd4716890999da596032d2",
+            content_id="ded4a083e75f4689b386fd2b706e792a",
+            kind="topic",
+            title="no exercise channel",
+        )
+        content.ChannelMetadata.objects.create(
+            id="63acff41781543828861ade41dbdd7ff",
+            name="no exercise channel metadata",
+            root=no_exercise_channel,
+        )
+        no_filter_response = self.client.get(reverse("channel-list"))
+        self.assertEqual(len(no_filter_response.data), 2)
+        with_filter_response = self.client.get(reverse("channel-list"), {"has_exercise": True})
+        self.assertEqual(len(with_filter_response.data), 1)
+        self.assertEqual(with_filter_response.data[0]["name"], "testing")
 
     def test_file_list(self):
         response = self.client.get(self._reverse_channel_url("file-list"))
         self.assertEqual(len(response.data), 5)
 
     def test_file_retrieve(self):
-        response = self.client.get(self._reverse_channel_url("file-detail", {'pk': "9f9438fe6b0d42dd8e913d7d04cfb2b1"}))
+        response = self.client.get(self._reverse_channel_url("file-detail", {'pk': "6bdfea4a01830fdd4a585181c0b8068c"}))
         self.assertEqual(response.data['preset'], 'High Resolution')
 
     def _setup_contentnode_progress(self):
@@ -436,7 +569,7 @@ class ContentNodeAPITestCase(APITestCase):
         self.client.login(username="learner", password="pass", facility=facility)
 
         # The progress endpoint is used, so should report progress for topics
-        assert_progress(root, 0.3)
+        assert_progress(root, 0.24)
         assert_progress(c1, 0)
         assert_progress(c2, 0.4)
         assert_progress(c2c1, 0.7)
@@ -462,7 +595,7 @@ class ContentNodeAPITestCase(APITestCase):
         response = self.client.get(self._reverse_channel_url("contentnodeprogress-list"))
 
         # The progress endpoint is used, so should report progress for topics
-        self.assertEqual(get_progress_fraction(root), 0.3)
+        self.assertEqual(get_progress_fraction(root), 0.24)
         self.assertEqual(get_progress_fraction(c1), 0)
         self.assertEqual(get_progress_fraction(c2), 0.4)
         self.assertEqual(get_progress_fraction(c2c1), 0.7)
@@ -473,18 +606,122 @@ class ContentNodeAPITestCase(APITestCase):
         self.client.get(self._reverse_channel_url("contentnode-list"), data={"parent": id})
         self.assertTrue(mock_cache_set.called)
 
-    @mock.patch.object(cache, 'set')
-    def test_parent_query_cache_not_set(self, mock_cache_set):
-        id = content.ContentNode.objects.get(title="c2c3").id
-        self.client.get(self._reverse_channel_url("contentnode-list"), data={"parent": id, 'kind': content_kinds.EXERCISE})
-        self.assertFalse(mock_cache_set.called)
-
     def test_parent_query_cache_hit(self):
         id = content.ContentNode.objects.get(title="c2c3").id
         self.client.get(self._reverse_channel_url("contentnode-list"), data={"parent": id})
         with mock.patch.object(cache, 'set') as mock_cache_set:
             self.client.get(self._reverse_channel_url("contentnode-list"), data={"parent": id})
             self.assertFalse(mock_cache_set.called)
+
+    def test_filtering_coach_content_anon(self):
+        response = self.client.get(self._reverse_channel_url("contentnode-list"), data={"by_role": True})
+        # TODO make content_test.json fixture more organized. Here just, hardcoding the correct count
+        self.assertEqual(len(response.data), 7)
+
+    def test_filtering_coach_content_admin(self):
+        self.client.login(username=self.admin.username, password=DUMMY_PASSWORD)
+        response = self.client.get(self._reverse_channel_url("contentnode-list"), data={"by_role": True})
+        expected_output = content.ContentNode.objects.exclude(available=False).count()  # coach_content node should be returned
+        self.assertEqual(len(response.data), expected_output)
+
+    def test_copies(self):
+        # the pk is actually a content id
+        response = self.client.get(reverse('contentnode-copies', kwargs={'pk': 'c6f49ea527824f398f4d5d26faf19396'}))
+        expected_titles = set(['root', 'c1', 'copy'])
+        response_titles = set()
+        for node in response.data[0]:
+            response_titles.add(node['title'])
+        self.assertSetEqual(expected_titles, response_titles)
+
+    def test_available_copies(self):
+        # the pk is actually a content id
+        response = self.client.get(reverse('contentnode-copies', kwargs={'pk': 'f2332710c2fd483386cdeb5dcbdda81a'}))
+        # no results should be returned for unavailable content node
+        self.assertEqual(len(response.data), 0)
+
+    def test_copies_count(self):
+        response = self.client.get(reverse('contentnode-copies-count'),
+                                   data={'content_ids': 'f2332710c2fd483386cdeb5dcbdda81f,c6f49ea527824f398f4d5d26faf15555,f2332710c2fd483386cdeb5dcbdda81a'})
+        # assert non existent content id does not show up in results
+        # no results should be returned for unavailable content node
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['count'],
+                         content.ContentNode.objects.filter(content_id='f2332710c2fd483386cdeb5dcbdda81f').count())
+
+    def test_search(self):
+        # ensure search works when there are no words not defined
+        response = self.client.get(reverse('contentnode-list'), data={'search': '!?,'})
+        self.assertEqual(len(response.data), 0)
+        # ensure search words when there is only stopwords
+        response = self.client.get(reverse('contentnode-list'), data={'search': 'or'})
+        self.assertEqual(len(response.data), 0)
+        # regular search
+        response = self.client.get(reverse('contentnode-list'), data={'search': 'root'})
+        self.assertEqual(len(response.data), 1)
+
+    def _create_session_logs(self):
+        content_ids = ('f2332710c2fd483386cdeb5ecbdda81f', 'ce603df7c46b424b934348995e1b05fb', '481e1bda1faa445d801ceb2afbd2f42f')
+        channel_id = '6199dde695db4ee4ab392222d5af1e5c'
+        [ContentSessionLog.objects.create(channel_id=channel_id,
+                                          content_id=content_ids[0],
+                                          start_timestamp=timezone.now(),
+                                          kind='audio') for _ in range(50)]
+        [ContentSessionLog.objects.create(channel_id=channel_id,
+                                          content_id=content_ids[1],
+                                          start_timestamp=timezone.now(),
+                                          kind='exercise') for _ in range(25)]
+        [ContentSessionLog.objects.create(channel_id=channel_id,
+                                          content_id=content_ids[2],
+                                          start_timestamp=timezone.now(),
+                                          kind='document') for _ in range(1)]
+
+        # create log for non existent content id
+        # should not show up in api response
+        ContentSessionLog.objects.create(channel_id=uuid.uuid4().hex,
+                                         content_id=uuid.uuid4().hex,
+                                         start_timestamp=timezone.now(),
+                                         kind='content')
+        return content_ids
+
+    def test_popular(self):
+        expected_content_ids = self._create_session_logs()
+        response = self.client.get(reverse('contentnode-list'), data={'popular': uuid.uuid4().hex})
+        response_content_ids = set(node['content_id'] for node in response.json())
+        self.assertSetEqual(set(expected_content_ids), response_content_ids)
+
+    def _create_summary_logs(self):
+        facility = Facility.objects.create(name="MyFac")
+        user = FacilityUser.objects.create(username="user", facility=facility)
+        content_ids = ('f2332710c2fd483386cdeb5ecbdda81f',)
+        channel_id = '6199dde695db4ee4ab392222d5af1e5c'
+        ContentSummaryLog.objects.create(channel_id=channel_id,
+                                         content_id=content_ids[0],
+                                         user_id=user.id,
+                                         start_timestamp=timezone.now(),
+                                         kind='audio')
+        # create log with progress of 1
+        # should not show up in api response
+        ContentSummaryLog.objects.create(channel_id=channel_id,
+                                         content_id='ce603df7c46b424b934348995e1b05fb',
+                                         user_id=user.id,
+                                         progress=1,
+                                         start_timestamp=timezone.now(),
+                                         kind='audio')
+
+        # create log for non existent content id
+        # should not show up in api response
+        ContentSummaryLog.objects.create(channel_id=uuid.uuid4().hex,
+                                         content_id=uuid.uuid4().hex,
+                                         user_id=user.id,
+                                         start_timestamp=timezone.now(),
+                                         kind='content')
+        return user, content_ids
+
+    def test_resume(self):
+        user, expected_content_ids = self._create_summary_logs()
+        response = self.client.get(reverse('contentnode-list'), data={'resume': user.id})
+        response_content_ids = set(node['content_id'] for node in response.json())
+        self.assertSetEqual(set(expected_content_ids), response_content_ids)
 
     def tearDown(self):
         """
