@@ -137,7 +137,11 @@ def run_services(port):
 
 
 def _rm_pid_file():
-    os.unlink(PID_FILE)
+    """
+    Removes the Kolibri PID file, checking that it exists firstly
+    """
+    if os.path.isfile(PID_FILE):
+        os.unlink(PID_FILE)
 
 
 def start(port=8080, run_cherrypy=True):
